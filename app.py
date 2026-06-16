@@ -33,7 +33,7 @@ st.set_page_config(page_title="Basketball Quiz Arena", page_icon="🏀", layout=
 
 MAX_QUESTIONS = 12     # ερωτήσεις ανά παιχνίδι
 START_LIVES   = 3
-TIME_LIMIT    = 25     # δευτερόλεπτα ανά ερώτηση
+TIME_LIMIT    = 22     # δευτερόλεπτα ανά ερώτηση
 TROLL_CHANCE  = 0.35
 FAVORED_TEAM  = "ΠΑΟΚ"  # το easter-egg της ομάδας — άλλαξέ το ελεύθερα!
 
@@ -429,11 +429,6 @@ if leaderboard_is_shared():
     st.sidebar.success("🌐 Κοινό leaderboard ενεργό")
 else:
     st.sidebar.caption("📋 Τοπικό leaderboard (δες οδηγίες για Google Sheets)")
-
-with st.sidebar.expander("🔧 Έλεγχος Google Sheets"):
-    if st.button("Δοκιμή σύνδεσης"):
-        ok, msg = diagnose_sheet()
-        (st.success if ok else st.error)(msg)
 
 # ============================================================
 #  ΣΕΛΙΔΑ 1: LOGIN
