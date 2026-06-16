@@ -346,6 +346,34 @@ def _get_sheet():
     except Exception:
         return None
 
+def diagnose_sheet():
+    """Επιστρέφει (ok: bool, μήνυμα) για έλεγχο σύνδεσης με το Google Sheet."""
+    if not _HAS_GSPREAD:
+        return False, "Το gspread δεν είναι εγκατεστημένο. Πρόσθεσέ το στο requirements.txt."
+    try:
+        creds = dict(st.secrets["gcp_service_account"])
+    except Exception:
+        return False, "Λείπει η ενότητα [gcp_service_account] από τα Secrets."
+    try:
+        key = st.secrets["leaderboard"]["sheet_key"]
+    except Exception:
+        return False, "Λείπει το [leaderboard] sheet_key από τα Secrets."
+    if key in ("", "THE_LONG_ID_FROM_STEP_1", "THE_LONG_ID_FROM_YOUR_SHEET_URL"):
+        return False, f"Το sheet_key είναι ακόμα placeholder ('{key}'). Βάλε το πραγματικό ID του φύλλου."
+    if "private_key" in creds and "\\n" in creds["private_key"]:
+        creds["private_key"] = creds["private_key"].replace("\\n", "\n")
+    try:
+        gc = gspread.service_account_from_dict(creds)
+    except Exception as e:
+        return False, f"Πρόβλημα με τα credentials: {type(e).__name__}: {e}"
+    try:
+        sh = gc.open_by_key(key)
+    except Exception as e:
+        return False, (f"Δεν άνοιξε το φύλλο. {type(e).__name__}. "
+                       f"Έλεγξε ότι το sheet_key είναι σωστό ΚΑΙ ότι μοιράστηκες "
+                       f"το φύλλο με το client_email ως Editor: {creds.get('client_email','?')}")
+    return True, f"OK — συνδέθηκε στο φύλλο «{sh.title}»."
+
 @st.cache_data(ttl=20, show_spinner=False)
 def _fetch_rows():
     """Διαβάζει τις εγγραφές από το Sheet. None => δεν υπάρχει σύνδεση."""
@@ -401,6 +429,11 @@ if leaderboard_is_shared():
     st.sidebar.success("🌐 Κοινό leaderboard ενεργό")
 else:
     st.sidebar.caption("📋 Τοπικό leaderboard (δες οδηγίες για Google Sheets)")
+
+with st.sidebar.expander("🔧 Έλεγχος Google Sheets"):
+    if st.button("Δοκιμή σύνδεσης"):
+        ok, msg = diagnose_sheet()
+        (st.success if ok else st.error)(msg)
 
 # ============================================================
 #  ΣΕΛΙΔΑ 1: LOGIN
