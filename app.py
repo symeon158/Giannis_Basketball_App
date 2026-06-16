@@ -143,19 +143,21 @@ def _tone_wav(freqs, dur=0.16, sr=22050, vol=0.35):
         w.writeframes(bytes(frames))
     return buf.getvalue()
 
-SOUND_FREQS = {
-    "correct": (660, 880, 1180),
-    "wrong":   (196, 147),
-    "win":     (523, 659, 784, 1046),
+SOUND_SPECS = {
+    "correct": {"freqs": (660, 880, 1180),      "dur": 0.16, "vol": 0.35},
+    "wrong":   {"freqs": (196, 147),            "dur": 0.18, "vol": 0.35},
+    "win":     {"freqs": (523, 659, 784, 1046), "dur": 0.18, "vol": 0.35},
+    "tick":    {"freqs": (1500,),               "dur": 0.07, "vol": 0.22},
 }
 
 def play_sound(kind):
     if not st.session_state.get("sound_on", True):
         return
-    freqs = SOUND_FREQS.get(kind)
-    if not freqs:
+    spec = SOUND_SPECS.get(kind)
+    if not spec:
         return
-    st.audio(_tone_wav(freqs), format="audio/wav", autoplay=True)
+    st.audio(_tone_wav(spec["freqs"], dur=spec["dur"], vol=spec["vol"]),
+             format="audio/wav", autoplay=True)
 
 def rerun_app():
     try:
@@ -213,6 +215,7 @@ def load_next():
     s.snd = None
     s.q_serial += 1
     s.time_left = TIME_LIMIT
+    s._last_tick = None
     s.q_start = time.time()
 
 def register_correct():
@@ -283,13 +286,18 @@ def _shot_clock_body():
         return
     elapsed = time.time() - s.q_start
     rem = max(0, TIME_LIMIT - int(elapsed))
-    icon = "⏱️" if rem > 6 else "⚠️"
+    icon = "⏱️" if rem > 5 else "⚠️"
     st.progress(rem / TIME_LIMIT, text=f"{icon} Χρόνος επίθεσης: {rem}s")
     if rem <= 0:
         s.time_left = 0
         s.answered = True
         register_wrong(by_time=True)
         rerun_app()
+        return
+    # Τικ αντίστροφης μέτρησης στα τελευταία 5 δευτερόλεπτα (μία φορά ανά δευτ.)
+    if 1 <= rem <= 5 and s.get("_last_tick") != rem:
+        s._last_tick = rem
+        play_sound("tick")
 
 if hasattr(st, "fragment"):
     try:
