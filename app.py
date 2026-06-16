@@ -1,292 +1,477 @@
-import streamlit as strl
+# ============================================================
+#  🏀 BASKETBALL QUIZ ARENA — Streamlit edition
+#  Αναβαθμισμένη έκδοση: χρονόμετρο, ζωές, σερί, βοήθειες,
+#  πόντοι μπόνους, ήχοι, confetti και παράσημα (badges).
+#
+#  ΕΚΤΕΛΕΣΗ:   streamlit run basketball_quiz_app.py
+#  ΑΠΑΙΤΗΣΕΙΣ: pip install --upgrade streamlit pandas
+#  (Το ζωντανό χρονόμετρο θέλει Streamlit >= 1.37. Αν έχεις
+#   παλιότερη έκδοση, το παιχνίδι παίζει κανονικά — απλώς το
+#   ρολόι δεν "χτυπάει" κάθε δευτερόλεπτο.)
+# ============================================================
+
+import time
 import random
-from collections import deque
 import pandas as pd
+import streamlit as st
+import streamlit.components.v1 as components
 
-# --- ΡΥΘΜΙΣΕΙΣ & ΔΕΔΟΜΕΝΑ ---
-strl.set_page_config(page_title="Basketball Quiz App", page_icon="🏀", layout="centered")
+# ------------------- ΡΥΘΜΙΣΕΙΣ -------------------
+st.set_page_config(page_title="Basketball Quiz Arena", page_icon="🏀", layout="centered")
 
-MAX_QUESTIONS = 15
+MAX_QUESTIONS = 12     # ερωτήσεις ανά παιχνίδι
+START_LIVES   = 3
+TIME_LIMIT    = 22     # δευτερόλεπτα ανά ερώτηση
+TROLL_CHANCE  = 0.35
+FAVORED_TEAM  = "ΠΑΟΚ"  # το easter-egg της ομάδας — άλλαξέ το ελεύθερα!
 
-# Λίστα με αστεία GIFs για κάθε λάθος απάντηση!
-FAIL_GIFS = [
-    "https://media.giphy.com/media/xT1XGESDlxjAWzAVpi/giphy.gif", # Swaggy P early celebration
-    "https://media.giphy.com/media/3oEdv07JVXwhImYGWc/giphy.gif", # Shaq laughing
-    "https://media.giphy.com/media/HwmB7t7krGtgE/giphy.gif",      # Doc Rivers shocked
-    "https://media.giphy.com/media/11bsDL7acBaiKk/giphy.gif",     # James Harden confused
-    "https://media.giphy.com/media/3o7aTnQqywBRwZmPII/giphy.gif", # LeBron disappointed
-    "https://media.giphy.com/media/l3E6uhDAN3W7vylji/giphy.gif",  # Michael Jordan laughing mockingly
-    "https://media.giphy.com/media/26FPn4rR1damB0MQo/giphy.gif"   # Russell Westbrook confused
-]
+DIFF_BASE = {"Εύκολο": 1, "Μέτριο": 2, "Δύσκολο": 3}
+LETTERS = ["A", "B", "C", "D"]
 
-# Βάση δεδομένων
-all_questions = [
-    # --- Η ΕΡΩΤΗΣΗ ΠΑΓΙΔΑ ---
-    {"q": "Ποια είναι η καλύτερη ελληνική ομάδα;", "opts": ["Ολυμπιακός", "ΠΑΟ", "ΠΑΟΚ", "ΑΕΚ"], "ans": "C", "troll": True, "diff": "Μυστικό"},
-    
+# ------------------- ΒΑΣΗ ΕΡΩΤΗΣΕΩΝ -------------------
+# diff: "Εύκολο" | "Μέτριο" | "Δύσκολο" ;  ans: γράμμα "A"-"D"
+ALL_QUESTIONS = [
     # --- ΕΥΚΟΛΑ ---
-    {"q": "Πόσοι παίκτες μιας ομάδας βρίσκονται ταυτόχρονα στο παρκέ;", "opts": ["4", "5", "6", "7"], "ans": "B", "troll": False, "diff": "Εύκολο"},
-    {"q": "Από ποια χώρα κατάγεται ο Γιάννης Αντετοκούνμπος;", "opts": ["Νιγηρία", "Ελλάδα", "ΗΠΑ", "Ισπανία"], "ans": "B", "troll": False, "diff": "Εύκολο"},
-    {"q": "Πόσες περιόδους (δεκάλεπτα) έχει ένας κανονικός αγώνας μπάσκετ;", "opts": ["2", "3", "4", "5"], "ans": "C", "troll": False, "diff": "Εύκολο"},
-    {"q": "Ποιο είναι το παρατσούκλι της Εθνικής Ελλάδος μπάσκετ;", "opts": ["Η επίσημη αγαπημένη", "Η 'χρυσή' ομάδα", "Τα λιοντάρια", "Οι αετοί"], "ans": "A", "troll": False, "diff": "Εύκολο"},
-    {"q": "Πόσους πόντους παίρνει μια ομάδα για κάθε εύστοχη ελεύθερη βολή;", "opts": ["1", "2", "3", "0.5"], "ans": "A", "troll": False, "diff": "Εύκολο"},
-    {"q": "Ποια ομάδα του NBA έχει ως σήμα ένα ελάφι (Bucks);", "opts": ["Σικάγο", "Μιλγουόκι", "Μαϊάμι", "Βοστώνη"], "ans": "B", "troll": False, "diff": "Εύκολο"},
-    {"q": "Τι χρώμα έχει η μπάλα στους επίσημους αγώνες μπάσκετ;", "opts": ["Κίτρινο", "Πορτοκαλί", "Καφέ", "Κόκκινο"], "ans": "B", "troll": False, "diff": "Εύκολο"},
+    {"q": "Πόσοι παίκτες μιας ομάδας βρίσκονται ταυτόχρονα στο παρκέ;", "opts": ["4", "5", "6", "7"], "ans": "B", "diff": "Εύκολο"},
+    {"q": "Από ποια χώρα κατάγεται ο Γιάννης Αντετοκούνμπο;", "opts": ["Νιγηρία", "Ελλάδα", "ΗΠΑ", "Ισπανία"], "ans": "B", "diff": "Εύκολο"},
+    {"q": "Πόσες περιόδους (δεκάλεπτα) έχει ένας κανονικός αγώνας μπάσκετ;", "opts": ["2", "3", "4", "5"], "ans": "C", "diff": "Εύκολο"},
+    {"q": "Πόσους πόντους παίρνεις για κάθε εύστοχη ελεύθερη βολή;", "opts": ["1", "2", "3", "μισό"], "ans": "A", "diff": "Εύκολο"},
+    {"q": "Ποια ομάδα του NBA έχει σήμα ένα ελάφι (Bucks);", "opts": ["Σικάγο", "Μιλγουόκι", "Μαϊάμι", "Βοστώνη"], "ans": "B", "diff": "Εύκολο"},
+    {"q": "Τι χρώμα έχει η μπάλα στους επίσημους αγώνες μπάσκετ;", "opts": ["Κίτρινο", "Πορτοκαλί", "Καφέ", "Κόκκινο"], "ans": "B", "diff": "Εύκολο"},
+    {"q": "Πόσους πόντους αξίζει ένα κανονικό καλάθι μέσα στο γήπεδο;", "opts": ["1", "2", "3", "4"], "ans": "B", "diff": "Εύκολο"},
+    {"q": "Σε ποια χώρα εφευρέθηκε το άθλημα του μπάσκετ;", "opts": ["Ελλάδα", "ΗΠΑ", "Καναδάς", "Ισπανία"], "ans": "B", "diff": "Εύκολο"},
+    {"q": "Με ποιο μέρος του σώματος ΔΕΝ επιτρέπεται να παίξεις σκόπιμα την μπάλα;", "opts": ["Χέρι", "Κεφάλι", "Πόδι", "Στήθος"], "ans": "C", "diff": "Εύκολο"},
+    {"q": "Πώς είναι το παρατσούκλι του Γιάννη Αντετοκούνμπο στο NBA;", "opts": ["Greek Freak", "The King", "Air", "The Beard"], "ans": "A", "diff": "Εύκολο"},
+    {"q": "Πόσα καλάθια (μπασκέτες) υπάρχουν σε ένα γήπεδο;", "opts": ["1", "2", "3", "4"], "ans": "B", "diff": "Εύκολο"},
 
     # --- ΜΕΤΡΙΑ ---
-    {"q": "Ποιος παίκτης έχει το παρατσούκλι 'Air' στην ιστορία του NBA;", "opts": ["LeBron James", "Kobe Bryant", "Michael Jordan", "Shaquille O'Neal"], "ans": "C", "troll": False, "diff": "Μέτριο"},
-    {"q": "Πόσα δευτερόλεπτα έχει μια ομάδα για να εκδηλώσει επίθεση;", "opts": ["14", "20", "24", "30"], "ans": "C", "troll": False, "diff": "Μέτριο"},
-    {"q": "Ποιος είναι ο πρώτος σκόρερ όλων των εποχών στην ιστορία του NBA;", "opts": ["Michael Jordan", "Kobe Bryant", "LeBron James", "Kareem Abdul-Jabbar"], "ans": "C", "troll": False, "diff": "Μέτριο"},
-    {"q": "Ποια ελληνική ομάδα έχει τα περισσότερα τρόπαια EuroLeague;", "opts": ["Ολυμπιακός", "Παναθηναϊκός", "ΑΕΚ", "ΠΑΟΚ"], "ans": "B", "troll": False, "diff": "Μέτριο"},
-    {"q": "Πόσα φάουλ χρειάζεται να κάνει ένας παίκτης στην EuroLeague για να αποβληθεί;", "opts": ["4", "5", "6", "7"], "ans": "B", "troll": False, "diff": "Μέτριο"},
-    {"q": "Ποιος θρυλικός Έλληνας παίκτης είχε το παρατσούκλι 'Γκάγκστερ';", "opts": ["Παναγιώτης Γιαννάκης", "Νίκος Γκάλης", "Φάνης Χριστοδούλου", "Δημήτρης Διαμαντίδης"], "ans": "B", "troll": False, "diff": "Μέτριο"},
-    {"q": "Πόσα λεπτά διαρκεί η παράταση σε έναν αγώνας μπάσκετ;", "opts": ["3 λεπτά", "5 λεπτά", "8 λεπτά", "10 λεπτά"], "ans": "B", "troll": False, "diff": "Μέτριο"},
-    {"q": "Σε ποια πόλη βρίσκεται η έδρα της Ζαλγκίρις;", "opts": ["Βίλνιους", "Κάουνας", "Ρίγα", "Ταλίν"], "ans": "B", "troll": False, "diff": "Μέτριο"},
+    {"q": "Ποιος παίκτης έχει το παρατσούκλι «Air» στην ιστορία του NBA;", "opts": ["LeBron James", "Kobe Bryant", "Michael Jordan", "Shaquille O'Neal"], "ans": "C", "diff": "Μέτριο"},
+    {"q": "Πόσα δευτερόλεπτα έχει μια ομάδα για να ολοκληρώσει την επίθεσή της;", "opts": ["14", "20", "24", "30"], "ans": "C", "diff": "Μέτριο"},
+    {"q": "Ποιος είναι ο πρώτος σκόρερ όλων των εποχών στην ιστορία του NBA;", "opts": ["Michael Jordan", "Kobe Bryant", "LeBron James", "Kareem Abdul-Jabbar"], "ans": "C", "diff": "Μέτριο"},
+    {"q": "Ποια ελληνική ομάδα έχει τα περισσότερα τρόπαια EuroLeague;", "opts": ["Ολυμπιακός", "Παναθηναϊκός", "ΑΕΚ", "ΠΑΟΚ"], "ans": "B", "diff": "Μέτριο"},
+    {"q": "Πόσα φάουλ χρειάζεται ένας παίκτης για να αποβληθεί (FIBA/EuroLeague);", "opts": ["4", "5", "6", "7"], "ans": "B", "diff": "Μέτριο"},
+    {"q": "Ποιος θρυλικός Έλληνας παίκτης είχε το παρατσούκλι «Γκάγκστερ»;", "opts": ["Παναγιώτης Γιαννάκης", "Νίκος Γκάλης", "Φάνης Χριστοδούλου", "Δημήτρης Διαμαντίδης"], "ans": "B", "diff": "Μέτριο"},
+    {"q": "Πόσα λεπτά διαρκεί μια παράταση στο μπάσκετ;", "opts": ["3", "5", "8", "10"], "ans": "B", "diff": "Μέτριο"},
+    {"q": "Σε ποια πόλη βρίσκεται η έδρα της Ζαλγκίρις;", "opts": ["Βίλνιους", "Κάουνας", "Ρίγα", "Ταλίν"], "ans": "B", "diff": "Μέτριο"},
+    {"q": "Ποιος έβαλε 100 πόντους σε έναν μόνο αγώνα NBA (ρεκόρ όλων των εποχών);", "opts": ["Wilt Chamberlain", "Kobe Bryant", "Michael Jordan", "James Harden"], "ans": "A", "diff": "Μέτριο"},
+    {"q": "Σε ποια πόλη κατέκτησε η Εθνική Ελλάδος το πρώτο της Ευρωμπάσκετ, το 1987;", "opts": ["Αθήνα", "Θεσσαλονίκη", "Μαδρίτη", "Ρώμη"], "ans": "A", "diff": "Μέτριο"},
+    {"q": "Σε ποια εθνική ομάδα αγωνίζεται ο Λούκα Ντόντσιτς;", "opts": ["Κροατία", "Σλοβενία", "Σερβία", "Ελλάδα"], "ans": "B", "diff": "Μέτριο"},
+    {"q": "Πόσους πόντους αξίζει ένα σουτ πίσω από τη γραμμή των τριών πόντων;", "opts": ["1", "2", "3", "4"], "ans": "C", "diff": "Μέτριο"},
+    {"q": "Το 2005 η Εθνική Ελλάδος κέρδισε ξανά το Ευρωμπάσκετ. Ποια νίκησε στον τελικό;", "opts": ["Γερμανία", "Γαλλία", "Ισπανία", "Λιθουανία"], "ans": "A", "diff": "Μέτριο"},
 
     # --- ΔΥΣΚΟΛΑ ---
-    {"q": "Ποια ομάδα έχει κατακτήσει τα περισσότερα πρωταθλήματα NBA στην ιστορία (ισοπαλία);", "opts": ["Lakers & Celtics", "Bulls & Warriors", "Spurs & Heat", "Knicks & Nets"], "ans": "A", "troll": False, "diff": "Δύσκολο"},
-    {"q": "Πόσα δευτερόλεπτα μπορεί να μείνει ένας επιθετικός μέσα στη ρακέτα;", "opts": ["3", "5", "8", "24"], "ans": "A", "troll": False, "diff": "Δύσκολο"},
-    {"q": "Ποιο είναι το ύψος της στεφάνης του μπάσκετ από το έδαφος (σε μέτρα);", "opts": ["2.95 μ.", "3.05 μ.", "3.15 μ.", "3.25 μ."], "ans": "B", "troll": False, "diff": "Δύσκολο"},
-    {"q": "Πόσα δευτερόλεπτα έχει μια ομάδα για να περάσει τη μπάλα στο μπροστινό γήπεδο;", "opts": ["5", "8", "10", "14"], "ans": "B", "troll": False, "diff": "Δύσκολο"},
-    {"q": "Ποιος παίκτης είναι γνωστός για το απίστευτο σουτ του έξω από τα 9 μέτρα;", "opts": ["Stephen Curry", "Klay Thompson", "Kevin Durant", "Kyrie Irving"], "ans": "A", "troll": False, "diff": "Δύσκολο"},
-    {"q": "Ποιος Σέρβος σέντερ των Ντένβερ Νάγκετς έχει κερδίσει πολλαπλά βραβεία MVP;", "opts": ["Nikola Jokic", "Bogdan Bogdanovic", "Luka Doncic", "Vlade Divac"], "ans": "A", "troll": False, "diff": "Δύσκολο"},
-    {"q": "Ποιος προπονητής έχει κατακτήσει τις περισσότερες EuroLeague;", "opts": ["Zeljko Obradovic", "Ettore Messina", "Ergin Ataman", "Pablo Laso"], "ans": "A", "troll": False, "diff": "Δύσκολο"},
-    {"q": "Πόσα φάουλ ομαδικά πρέπει να κάνει μια ομάδα σε ένα δεκάλεπτο για να στείλει τον αντίπαλο στις βολές;", "opts": ["3", "4", "5", "6"], "ans": "B", "troll": False, "diff": "Δύσκολο"}
+    {"q": "Ποια ομάδα έχει κατακτήσει τα περισσότερα πρωταθλήματα στην ιστορία του NBA;", "opts": ["LA Lakers", "Boston Celtics", "Chicago Bulls", "Golden State"], "ans": "B", "diff": "Δύσκολο"},
+    {"q": "Πόσα δευτερόλεπτα μπορεί να μείνει ένας επιθετικός μέσα στη ρακέτα;", "opts": ["3", "5", "8", "24"], "ans": "A", "diff": "Δύσκολο"},
+    {"q": "Ποιο είναι το ύψος της στεφάνης από το έδαφος;", "opts": ["2.95 μ.", "3.05 μ.", "3.15 μ.", "3.25 μ."], "ans": "B", "diff": "Δύσκολο"},
+    {"q": "Πόσα δευτερόλεπτα έχει μια ομάδα για να περάσει τη μπάλα στο μπροστινό γήπεδο;", "opts": ["5", "8", "10", "14"], "ans": "B", "diff": "Δύσκολο"},
+    {"q": "Ποιος παίκτης φημίζεται για το σουτ του από τεράστια απόσταση;", "opts": ["Stephen Curry", "Klay Thompson", "Kevin Durant", "Kyrie Irving"], "ans": "A", "diff": "Δύσκολο"},
+    {"q": "Ποιος Σέρβος σέντερ των Ντένβερ έχει κερδίσει πολλαπλά βραβεία MVP;", "opts": ["Nikola Jokic", "Bogdan Bogdanovic", "Luka Doncic", "Vlade Divac"], "ans": "A", "diff": "Δύσκολο"},
+    {"q": "Ποιος προπονητής έχει κατακτήσει τις περισσότερες EuroLeague;", "opts": ["Zeljko Obradovic", "Ettore Messina", "Ergin Ataman", "Pablo Laso"], "ans": "A", "diff": "Δύσκολο"},
+    {"q": "Ποια είναι η διάμετρος της στεφάνης (μπασκέτας);", "opts": ["40 εκ.", "45 εκ.", "50 εκ.", "55 εκ."], "ans": "B", "diff": "Δύσκολο"},
+    {"q": "Ποιες είναι οι διαστάσεις ενός επίσημου γηπέδου FIBA;", "opts": ["26x14 μ.", "28x15 μ.", "30x16 μ.", "25x13 μ."], "ans": "B", "diff": "Δύσκολο"},
+    {"q": "Σε ποια απόσταση βρίσκεται η γραμμή των τριών πόντων στη FIBA;", "opts": ["6.25 μ.", "6.75 μ.", "7.24 μ.", "5.80 μ."], "ans": "B", "diff": "Δύσκολο"},
+    {"q": "Ποιος Έλληνας γκαρντ είχε το παρατσούκλι «Kill Bill»;", "opts": ["Βασίλης Σπανούλης", "Νικ Καλάθης", "Κώστας Σλούκας", "Γιάννης Μπουρούσης"], "ans": "A", "diff": "Δύσκολο"},
 ]
 
-# --- SIDEBAR: ΥΠΟΓΡΑΦΗ ΔΗΜΙΟΥΡΓΟΥ ---
-strl.sidebar.title("🏀 Info")
-strl.sidebar.info("Ένα διασκεδαστικό κουίζ μπάσκετ για την παρέα!")
-strl.sidebar.markdown("---")
-strl.sidebar.markdown("👨‍💻 **Δημιουργός:**")
-strl.sidebar.markdown("### Γιάννης Παπαδόπουλος")
+TROLL_Q = {
+    "q": "Ποια είναι η καλύτερη ελληνική ομάδα; 🤔",
+    "opts": ["Ολυμπιακός", "Παναθηναϊκός", "ΠΑΟΚ", "ΑΕΚ"],
+    "ans": "C", "diff": "Μυστικό", "troll": True,
+}
 
-# --- ΑΡΧΙΚΟΠΟΙΗΣΗ GLOBAL STATE (Leaderboard) ---
-if "leaderboard" not in strl.session_state:
-    strl.session_state.leaderboard = []
+TEAMS = ["Ολυμπιακός", "Παναθηναϊκός", "ΑΕΚ", "ΠΑΟΚ", "Άρης", "Ηρακλής",
+         "Φενέρμπαχτσε", "Εφές", "Ρεάλ Μαδρίτης", "Μπαρτσελόνα", "Μονακό", "Άλλη / Καμία"]
 
-# --- ΑΡΧΙΚΟΠΟΙΗΣΗ GAME STATE ---
-if "app_page" not in strl.session_state:
-    strl.session_state.app_page = "login" 
-if "username" not in strl.session_state:
-    strl.session_state.username = ""
-if "team" not in strl.session_state:
-    strl.session_state.team = ""
-if "fav_player" not in strl.session_state:
-    strl.session_state.fav_player = ""
+# ------------------- SIDEBAR -------------------
+st.sidebar.title("🏀 Info")
+st.sidebar.info("Ένα διασκεδαστικό κουίζ μπάσκετ για την παρέα!")
+st.sidebar.checkbox("🔊 Ήχοι", value=True, key="sound_on")
+st.sidebar.markdown("---")
+st.sidebar.markdown("👨‍💻 **Δημιουργός:**")
+st.sidebar.markdown("### Γιάννης Παπαδόπουλος")
 
-def init_game(diff):
-    strl.session_state.current_diff = diff
-    
-    filtered = [q for q in all_questions if not q.get("troll")]
-    if diff != "Τυχαίες (Mix)":
-        filtered = [q for q in filtered if q["diff"] == diff]
-        
-    random.shuffle(filtered)
-    queue_list = filtered[:MAX_QUESTIONS]
-    
-    if random.random() < 0.35:
-        troll_q = all_questions[0]
-        insert_idx = random.randint(1, len(queue_list)-1)
-        queue_list.insert(insert_idx, troll_q)
-        
-    strl.session_state.question_queue = deque(queue_list)
-    strl.session_state.initial_count = len(queue_list)
-    strl.session_state.unique_completed = 0 
-    strl.session_state.score = 0  
-    strl.session_state.mistakes = 0 
-    strl.session_state.streak = 0
-    strl.session_state.error_streak = 0  
-    strl.session_state.current_question = None
-    strl.session_state.feedback = None
-    strl.session_state.feedback_gif = None 
-    strl.session_state.app_page = "quiz"
+# ------------------- ΛΙΓΟ ΧΡΩΜΑ (CSS) -------------------
+st.markdown("""
+<style>
+.stApp { background: radial-gradient(1000px 500px at 50% -10%, #1d3553 0%, transparent 60%), linear-gradient(180deg,#0E1A2B,#0A1422); }
+div[data-testid="stMetric"] { background:#0b1726; border:1px solid #243f5d; border-radius:14px; padding:10px; }
+</style>
+""", unsafe_allow_html=True)
 
-def get_next_question():
-    if len(strl.session_state.question_queue) == 0:
-        strl.session_state.leaderboard.append({
-            "Όνομα": strl.session_state.username,
-            "Ομάδα": strl.session_state.team,
-            "Αγ. Παίκτης": strl.session_state.fav_player,
-            "Επίπεδο": strl.session_state.current_diff,
-            "Σκορ (1η)": strl.session_state.score,
-            "Λάθη": strl.session_state.mistakes
-        })
-        strl.session_state.app_page = "game_over"
+# ------------------- ΑΡΧΙΚΟΠΟΙΗΣΗ STATE -------------------
+def ss_default(key, val):
+    if key not in st.session_state:
+        st.session_state[key] = val
+
+ss_default("page", "login")
+ss_default("leaderboard", [])
+ss_default("name", "")
+ss_default("team", "")
+ss_default("player", "")
+ss_default("diff", "Τυχαίες (Mix)")
+
+# ------------------- ΉΧΟΣ (Web Audio μέσω component) -------------------
+def play_sound(kind):
+    if not st.session_state.get("sound_on", True):
+        return
+    seqs = {"correct": [660, 880, 1180], "wrong": [200, 150], "win": [523, 659, 784, 1046]}
+    seq = seqs.get(kind, [440])
+    components.html(f"""
+    <script>
+    (function(){{
+      try {{
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const seq = {seq};
+        seq.forEach(function(f, i) {{
+          const o = ctx.createOscillator(), g = ctx.createGain();
+          o.type = 'square'; o.frequency.value = f;
+          o.connect(g); g.connect(ctx.destination);
+          const t = ctx.currentTime + i * 0.12;
+          g.gain.setValueAtTime(0.15, t);
+          g.gain.exponentialRampToValueAtTime(0.0001, t + 0.15);
+          o.start(t); o.stop(t + 0.16);
+        }});
+      }} catch(e) {{}}
+    }})();
+    </script>
+    """, height=0)
+
+def rerun_app():
+    try:
+        st.rerun(scope="app")
+    except TypeError:
+        st.rerun()
+
+# ------------------- ΛΟΓΙΚΗ ΠΑΙΧΝΙΔΙΟΥ -------------------
+def init_game(name, team, player, diff):
+    s = st.session_state
+    s.name, s.team, s.player, s.diff = name, team, player, diff
+
+    pool = [dict(q) for q in ALL_QUESTIONS if diff == "Τυχαίες (Mix)" or q["diff"] == diff]
+    random.shuffle(pool)
+    pool = pool[:MAX_QUESTIONS]
+    if random.random() < TROLL_CHANCE and len(pool) > 1:
+        idx = random.randint(1, len(pool) - 1)
+        pool.insert(idx, dict(TROLL_Q))
+
+    s.queue = pool
+    s.total = len(pool)
+    s.done = 0
+    s.score = 0
+    s.mistakes = 0
+    s.streak = 0
+    s.best_streak = 0
+    s.err_streak = 0
+    s.lives = START_LIVES
+    s.used_5050 = False
+    s.used_skip = False
+    s.used_any_lifeline = False
+    s.cur = None
+    s.q_serial = 0
+    s.removed_opts = []
+    s.answered = False
+    s.feedback = None
+    s.emoji = ""
+    s.celebrate = None
+    s.snd = None
+    s.time_left = TIME_LIMIT
+    s.q_start = time.time()
+    s.page = "quiz"
+
+def load_next():
+    s = st.session_state
+    if s.lives <= 0 or len(s.queue) == 0:
+        finish_game()
+        return
+    s.cur = s.queue.pop(0)
+    s.answered = False
+    s.removed_opts = []
+    s.feedback = None
+    s.emoji = ""
+    s.celebrate = None
+    s.snd = None
+    s.q_serial += 1
+    s.time_left = TIME_LIMIT
+    s.q_start = time.time()
+
+def register_correct():
+    s = st.session_state
+    s.done += 1
+    s.streak += 1
+    s.err_streak = 0
+    s.best_streak = max(s.best_streak, s.streak)
+    base = 2 if s.cur.get("troll") else DIFF_BASE.get(s.cur["diff"], 1)
+    time_bonus = s.time_left // 3
+    streak_bonus = 2 if s.streak >= 3 else 0
+    gained = base + time_bonus + streak_bonus
+    s.score += gained
+    s.snd = "correct"
+
+    if s.cur.get("troll"):
+        s.feedback = ("ok", f"🦅 ΜΠΑΜ! Έτσι μπράβο {s.name}! (+{gained} πόντοι)")
+        s.emoji, s.celebrate = "🦅", "balloons"
+    elif s.streak >= 3:
+        s.feedback = ("ok", f"✅ ΣΩΣΤΟ! 🔥 Είσαι ON FIRE — {s.streak} στη σειρά! (+{gained} πόντοι)")
+        s.emoji, s.celebrate = "🔥", "balloons"
     else:
-        strl.session_state.current_question = strl.session_state.question_queue.popleft()
-        strl.session_state.feedback = None
-        strl.session_state.feedback_gif = None
+        cheer = random.choice(["Εξαιρετικό σουτ!", "Καθαρό καλάθι! 🏀", "Μπράβο, swish!", "Το βρήκες!"])
+        s.feedback = ("ok", f"✅ ΣΩΣΤΟ! {cheer} (+{gained} πόντοι)")
+        s.emoji, s.celebrate = "🏀", None
 
-# ==========================================
-# ΣΕΛΙΔΑ 1: LOBBY & ΕΓΓΡΑΦΗ ΧΡΗΣΤΗ
-# ==========================================
-if strl.session_state.app_page == "login":
-    strl.title("🏀 Καλώς ήρθες στο Basketball Quiz!")
-    strl.markdown("Δείξε μας τι ξέρεις από μπάσκετ. Φτιάξε το προφίλ σου για να ξεκινήσουμε!")
-    
-    with strl.form("login_form"):
-        player_name = strl.text_input("Το Όνομά σου / Nickname:")
-        
-        teams_list = ["Ολυμπιακός", "Παναθηναϊκός", "ΑΕΚ", "ΠΑΟΚ", "Άρης", "Ηρακλής", 
-                      "Φενέρμπαχτσε", "Εφές", "Ρεάλ Μαδρίτης", "Μπαρτσελόνα", "Μονακό", "Άλλη/Καμία"]
-        fav_team = strl.selectbox("Ποια είναι η ομάδα σου;", teams_list)
-        
-        f_player = strl.text_input("Ποιος είναι ο αγαπημένος σου παίκτης;")
-        
-        selected_diff = strl.radio("Επίλεξε Δυσκολία:", ["Εύκολο", "Μέτριο", "Δύσκολο", "Τυχαίες (Mix)"], horizontal=True)
-        
-        submitted = strl.form_submit_button("🚀 Έναρξη Παιχνιδιού!", type="primary")
-        
+def register_wrong(by_time=False):
+    s = st.session_state
+    s.mistakes += 1
+    s.err_streak += 1
+    s.streak = 0
+    s.lives -= 1
+    s.snd = "wrong"
+    s.celebrate = None
+    correct_txt = s.cur["opts"][LETTERS.index(s.cur["ans"])]
+
+    if s.cur.get("troll"):
+        s.feedback = ("bad", f"❌ Ε όχι! Η σωστή (για το παιχνίδι μας 😉) ήταν: **{correct_txt}**. Μόνο {FAVORED_TEAM}! 🦅")
+        s.emoji = "😅"
+    else:
+        pl = f"Ούτε ο/η {s.player} δεν θα την έχανε αυτή! " if s.player != "Κανένας" else "Σχεδόν! "
+        lead = "⏰ Σε πρόλαβε το χρονόμετρο! " if by_time else "❌ Όχι αυτή. "
+        fire = "Πάρε ανάσα και ξαναμπές δυνατά! " if s.err_streak >= 3 else ""
+        extra = "" if s.lives > 0 else " Τέλειωσαν οι ζωές σου!"
+        s.feedback = ("bad", f"{lead}{fire}{pl}Σωστή απάντηση: **{correct_txt}**.{extra}")
+        s.emoji = "😅" if s.lives > 0 else "🛑"
+
+    if s.lives > 0 and not s.cur.get("troll"):
+        rq = dict(s.cur)
+        rq["repeat"] = True
+        s.queue.append(rq)
+
+def finish_game():
+    s = st.session_state
+    s.leaderboard.append({
+        "🆕": "🆕",
+        "Όνομα": s.name, "Ομάδα": s.team, "Αγ. Παίκτης": s.player,
+        "Σκορ": s.score, "Λάθη": s.mistakes,
+    })
+    s.page = "over"
+
+# ------------------- ΖΩΝΤΑΝΟ ΧΡΟΝΟΜΕΤΡΟ -------------------
+def _shot_clock_body():
+    s = st.session_state
+    if s.get("answered"):
+        rem = s.get("time_left", 0)
+        st.progress(rem / TIME_LIMIT if TIME_LIMIT else 0, text=f"⏱️ Χρόνος: {rem}s")
+        return
+    elapsed = time.time() - s.q_start
+    rem = max(0, TIME_LIMIT - int(elapsed))
+    icon = "⏱️" if rem > 6 else "⚠️"
+    st.progress(rem / TIME_LIMIT, text=f"{icon} Χρόνος επίθεσης: {rem}s")
+    if rem <= 0:
+        s.time_left = 0
+        s.answered = True
+        register_wrong(by_time=True)
+        rerun_app()
+
+if hasattr(st, "fragment"):
+    try:
+        shot_clock = st.fragment(run_every=1)(_shot_clock_body)
+    except TypeError:
+        shot_clock = _shot_clock_body
+else:
+    shot_clock = _shot_clock_body
+
+# ------------------- LEADERBOARD -------------------
+def render_leaderboard():
+    s = st.session_state
+    if not s.leaderboard:
+        st.caption("Κανένα σκορ ακόμα — γίνε εσύ ο πρώτος! 🏀")
+        return
+    df = pd.DataFrame(s.leaderboard)
+    df = df.sort_values(by=["Σκορ", "Λάθη"], ascending=[False, True]).reset_index(drop=True)
+    df.index = df.index + 1
+    st.dataframe(df, use_container_width=True)
+
+# ============================================================
+#  ΣΕΛΙΔΑ 1: LOGIN
+# ============================================================
+if st.session_state.page == "login":
+    st.title("🏀 Καλώς ήρθες στο παρκέ!")
+    st.markdown("Φτιάξε το προφίλ σου, διάλεξε δυσκολία και δείξε μας τι ξέρεις από μπάσκετ.")
+
+    with st.form("login_form"):
+        name = st.text_input("Το όνομά σου / Nickname:")
+        team = st.selectbox("Η αγαπημένη σου ομάδα:", TEAMS)
+        player = st.text_input("Ο αγαπημένος σου παίκτης:")
+        diff = st.radio("Επίπεδο δυσκολίας:",
+                        ["Εύκολο", "Μέτριο", "Δύσκολο", "Τυχαίες (Mix)"],
+                        index=3, horizontal=True)
+        submitted = st.form_submit_button("🚀 Έναρξη παιχνιδιού!", type="primary", use_container_width=True)
         if submitted:
-            if not player_name.strip():
-                strl.error("Βάλε ένα όνομα για να παίξεις!")
+            if not name.strip():
+                st.error("✋ Βάλε ένα όνομα για να μπεις στο παρκέ!")
             else:
-                strl.session_state.username = player_name
-                strl.session_state.team = fav_team
-                strl.session_state.fav_player = f_player.strip() if f_player.strip() else "Κανένας"
-                init_game(selected_diff)
-                strl.rerun()
+                init_game(name.strip(), team, player.strip() or "Κανένας", diff)
+                st.rerun()
 
-    strl.markdown("---")
-    if strl.session_state.leaderboard:
-        strl.subheader("🏆 Leaderboard (Σημερινά Αποτελέσματα)")
-        df_lb = pd.DataFrame(strl.session_state.leaderboard)
-        df_lb = df_lb.sort_values(by=["Σκορ (1η)", "Λάθη"], ascending=[False, True]).reset_index(drop=True)
-        df_lb.index = df_lb.index + 1
-        strl.dataframe(df_lb, use_container_width=True)
-        
-    strl.markdown("<br><center><i>Ανάπτυξη και Σχεδιασμός: Γιάννης Παπαδόπουλος © 2026</i></center>", unsafe_allow_html=True)
+    st.markdown("---")
+    st.subheader("🏆 Leaderboard (σημερινά αποτελέσματα)")
+    render_leaderboard()
+    st.markdown("<br><center><i>Ανάπτυξη & Σχεδιασμός: Γιάννης Παπαδόπουλος © 2026</i></center>", unsafe_allow_html=True)
 
+# ============================================================
+#  ΣΕΛΙΔΑ 2: ΚΟΥΙΖ
+# ============================================================
+elif st.session_state.page == "quiz":
+    s = st.session_state
+    st.title(f"🏀 {s.name} | 🛡️ {s.team} | ⭐ {s.player}")
 
-# ==========================================
-# ΣΕΛΙΔΑ 2: ΤΟ ΚΟΥΙΖ
-# ==========================================
-elif strl.session_state.app_page == "quiz":
-    strl.title(f"🏀 {strl.session_state.username} | 🛡️ {strl.session_state.team} | ⭐ {strl.session_state.fav_player}")
+    if s.cur is None:
+        load_next()
 
-    if strl.session_state.current_question is None:
-        get_next_question()
+    # --- σκορ-μπόρντ ---
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Σκορ", s.score)
+    c2.metric("🔥 Σερί", s.streak)
+    c3.metric("Ζωές", "❤️" * s.lives + "🤍" * max(0, START_LIVES - s.lives))
 
-    progress_val = strl.session_state.unique_completed / strl.session_state.initial_count if strl.session_state.initial_count > 0 else 0
-    strl.progress(progress_val, text=f"Πρόοδος: Έχεις βρει {strl.session_state.unique_completed} από {strl.session_state.initial_count} ερωτήσεις")
-    
-    col1, col2, col3 = strl.columns(3)
-    col1.metric(label="Σκορ (Με την 1η)", value=strl.session_state.score)
-    col2.metric(label="Λάθη", value=strl.session_state.mistakes)
-    col3.metric(label="🔥 Σερί", value=strl.session_state.streak)
+    # --- πρόοδος ---
+    prog = s.done / s.total if s.total else 0
+    st.progress(prog, text=f"Έχεις βρει {s.done} από {s.total} ερωτήσεις")
 
-    strl.markdown("---")
+    # --- χρονόμετρο ---
+    shot_clock()
 
-    q_data = strl.session_state.current_question
+    st.markdown("---")
+    cur = s.cur
 
-    diff_badge = f"[{q_data['diff']}]" if "diff" in q_data and q_data["diff"] != "Μυστικό" else ""
-    repeat_badge = " 🔄 (Επανάληψη)" if q_data.get("is_repeat") else ""
-    strl.subheader(f"❓ {diff_badge}{repeat_badge} {q_data['q']}")
+    badge = "" if cur.get("troll") else f"`{cur['diff']}` "
+    repeat = "🔄 (Επανάληψη) " if cur.get("repeat") else ""
+    st.subheader(f"❓ {badge}{repeat}{cur['q']}")
 
-    mapping = ["A", "B", "C", "D"]
-    options_with_letters = [f"{mapping[i]}) {opt}" for i, opt in enumerate(q_data["opts"])]
+    # --- επιλογές (φιλτράρισμα για το 50:50) ---
+    visible = [(LETTERS[i], opt) for i, opt in enumerate(cur["opts"]) if LETTERS[i] not in s.removed_opts]
+    labels = [f"{ltr}) {txt}" for ltr, txt in visible]
+    choice = st.radio("Επίλεξε την απάντησή σου:", labels, index=None,
+                      key=f"radio_{s.q_serial}", disabled=s.answered)
 
-    is_disabled = strl.session_state.feedback is not None
+    # --- βοήθειες (όχι στην παγίδα) ---
+    if not cur.get("troll"):
+        lc1, lc2 = st.columns(2)
+        if lc1.button("✂️ 50:50", disabled=s.used_5050 or s.answered, use_container_width=True):
+            s.used_5050 = True
+            s.used_any_lifeline = True
+            wrong_letters = [l for l in LETTERS if l != cur["ans"]]
+            s.removed_opts = random.sample(wrong_letters, 2)
+            st.rerun()
+        if lc2.button("⏭️ Προσπέραση", disabled=s.used_skip or s.answered, use_container_width=True):
+            s.used_skip = True
+            s.used_any_lifeline = True
+            rq = dict(cur)
+            rq["repeat"] = True
+            s.queue.append(rq)
+            load_next()
+            st.rerun()
 
-    radio_key = f"radio_{strl.session_state.unique_completed}_{strl.session_state.mistakes}"
-    user_choice = strl.radio("Επιλέξτε την απάντησή σας:", options_with_letters, index=None, key=radio_key, disabled=is_disabled)
-
-    if strl.button("🎯 Υποβολή Απάντησης", use_container_width=True, disabled=is_disabled):
-        if user_choice is None:
-            strl.warning("Παρακαλώ επιλέξτε μια απάντηση πρώτα!")
+    # --- υποβολή ---
+    if st.button("🎯 Υποβολή απάντησης", type="primary", use_container_width=True, disabled=s.answered):
+        if choice is None:
+            st.warning("⚠️ Διάλεξε πρώτα μια απάντηση!")
         else:
-            chosen_letter = user_choice[0] 
-            
-            if chosen_letter == q_data["ans"]:
-                strl.session_state.unique_completed += 1
-                strl.session_state.streak += 1 
-                strl.session_state.error_streak = 0 
-                strl.session_state.feedback_gif = None
-                
-                if not q_data.get("is_repeat"):
-                    strl.session_state.score += 1
-                
-                if q_data.get("troll"):
-                    strl.session_state.feedback = ("success", f"🦅 ΜΠΑΜ! Έτσι μπράβο ρε {strl.session_state.username}! Μόνο ΠΑΟΚ!")
-                    strl.balloons() 
-                    strl.session_state.feedback_gif = "https://media.giphy.com/media/26FPCXdkvDbKBbgOI/giphy.gif" 
-                else:
-                    msg = "✅ ΣΩΣΤΟ! Εξαιρετικό σουτ!"
-                    if strl.session_state.streak >= 3:
-                        msg = f"✅ ΣΩΣΤΟ! 🔥 Είσαι On Fire ({strl.session_state.streak} σερί) σαν τον {strl.session_state.fav_player}!"
-                        strl.session_state.feedback_gif = "https://media.giphy.com/media/xT9DPx50HqZ4FpBqyA/giphy.gif" 
-                    strl.session_state.feedback = ("success", msg)
+            elapsed = time.time() - s.q_start
+            rem = max(0, TIME_LIMIT - int(elapsed))
+            s.time_left = rem
+            s.answered = True
+            chosen_letter = choice[0]
+            if rem <= 0:
+                register_wrong(by_time=True)
+            elif chosen_letter == cur["ans"]:
+                register_correct()
             else:
-                strl.session_state.mistakes += 1
-                strl.session_state.error_streak += 1 
-                strl.session_state.streak = 0 
-                
-                # Διαλέγουμε ένα τυχαίο GIF από τη λίστα μας!
-                random_fail_gif = random.choice(FAIL_GIFS)
-                strl.session_state.feedback_gif = random_fail_gif
-                
-                if q_data.get("troll"):
-                    team_taunt = f"Είσαι {strl.session_state.team}" if strl.session_state.team != "Άλλη/Καμία" else "Παίζεις μπάσκετ"
-                    player_taunt = f"έχεις είδωλο τον {strl.session_state.fav_player}" if strl.session_state.fav_player != "Κανένας" else ""
-                    strl.session_state.feedback = ("error", f"❌ ΛΑΘΟΣ! {team_taunt}, {player_taunt} και νομίζεις ξέρεις; Μόνο ΠΑΟΚ ρε! 🦅")
-                else:
-                    player_trash = f"Ούτε ο {strl.session_state.fav_player} δεν έριχνε τέτοια τούβλα!" if strl.session_state.fav_player != "Κανένας" else "Έσπασες τα καλάθια!"
-                    
-                    if strl.session_state.error_streak >= 3:
-                        strl.session_state.feedback = ("error", f"❌ 3 σερί λάθη! {player_trash} Η σωστή ήταν η {q_data['ans']}.")
-                    else:
-                        strl.session_state.feedback = ("error", f"❌ ΛΑΘΟΣ! {player_trash} Η σωστή ήταν η {q_data['ans']}. (Πάει στο τέλος)")
-                
-                repeat_q = q_data.copy()
-                repeat_q["is_repeat"] = True
-                strl.session_state.question_queue.append(repeat_q)
-            
-            strl.rerun() 
+                register_wrong(by_time=False)
+            st.rerun()
 
-    # --- ΕΜΦΑΝΙΣΗ FEEDBACK & GIF ---
-    if strl.session_state.feedback:
-        status, msg = strl.session_state.feedback
-        if status == "success":
-            strl.success(msg)
-        else:
-            strl.error(msg)
-            
-        if strl.session_state.feedback_gif:
-            strl.image(strl.session_state.feedback_gif, width=350)
-        
-        btn_text = "➡️ Επόμενη Ερώτηση" if len(strl.session_state.question_queue) > 0 else "🏆 Τέλος! Πάμε στα Αποτελέσματα!"
-        
-        if strl.button(btn_text, type="primary", use_container_width=True):
-            get_next_question()
-            strl.rerun()
+    # --- feedback ---
+    if s.feedback:
+        status, msg = s.feedback
+        st.markdown(f"<div style='font-size:54px;text-align:center'>{s.emoji}</div>", unsafe_allow_html=True)
+        (st.success if status == "ok" else st.error)(msg)
+        if s.snd:
+            play_sound(s.snd)
+            s.snd = None  # να μην ξαναπαίξει
+        if s.celebrate == "balloons":
+            st.balloons()
+            s.celebrate = None
 
-# ==========================================
-# ΣΕΛΙΔΑ 3: ΑΠΟΤΕΛΕΣΜΑΤΑ
-# ==========================================
-elif strl.session_state.app_page == "game_over":
-    strl.title("🏆 Τέλος Παιχνιδιού!")
-    strl.markdown(f"Μπράβο **{strl.session_state.username}**! Το σκορ σου καταγράφηκε.")
-    strl.markdown("---")
-    
-    col1, col2 = strl.columns(2)
-    col1.metric(label="✅ Σκορ (Με την 1η)", value=f"{strl.session_state.score} / {strl.session_state.initial_count}")
-    col2.metric(label="❌ Συνολικά Λάθη", value=strl.session_state.mistakes)
-    
-    percentage = (strl.session_state.score / strl.session_state.initial_count) * 100 if strl.session_state.initial_count > 0 else 0
-    
-    strl.markdown("### Αξιολόγηση Εμφάνισης:")
-    if percentage >= 80:
-        strl.success(f"🔥 Είσαι MVP! Ο {strl.session_state.fav_player} θα ήταν περήφανος!")
-        strl.balloons()
-    elif percentage >= 50:
-        strl.info("🏀 Τίμια εμφάνιση. Έχεις ταλέντο αλλά θέλεις δουλειά.")
+        last = (len(s.queue) == 0) or (s.lives <= 0)
+        btn_text = "🏆 Δες τα αποτελέσματα!" if last else "➡️ Επόμενη ερώτηση"
+        if st.button(btn_text, type="primary", use_container_width=True):
+            load_next()
+            st.rerun()
+
+# ============================================================
+#  ΣΕΛΙΔΑ 3: ΑΠΟΤΕΛΕΣΜΑΤΑ
+# ============================================================
+elif st.session_state.page == "over":
+    s = st.session_state
+    answered = s.done + s.mistakes
+    acc = round(s.done / answered * 100) if answered else 0
+
+    if s.lives <= 0:
+        st.title("🛑 Τέλος αγώνα!")
+    elif acc >= 80:
+        st.title("🏆 ΝΙΚΗΣΕΣ!")
+    elif acc >= 50:
+        st.title("👏 Καλό παιχνίδι!")
     else:
-        strl.error(f"🧱 Ούτε σε μπασκέτα σε λούνα παρκ... Θέλεις προπόνηση!")
-        
-    strl.markdown("---")
-    if strl.button("🏠 Επιστροφή στο Αρχικό Μενού", use_container_width=True, type="primary"):
-        strl.session_state.app_page = "login"
-        strl.rerun()
-        
-    strl.markdown("<br><center><i>Ανάπτυξη και Σχεδιασμός: Γιάννης Παπαδόπουλος © 2026</i></center>", unsafe_allow_html=True)
+        st.title("🏀 Τέλος αγώνα!")
+
+    st.markdown(f"Μπράβο **{s.name}**! Το σκορ σου μπήκε στο leaderboard.")
+    st.markdown("---")
+
+    r1, r2, r3, r4 = st.columns(4)
+    r1.metric("✅ Σκορ", s.score)
+    r2.metric("❌ Λάθη", s.mistakes)
+    r3.metric("🔥 Καλύτερο σερί", s.best_streak)
+    r4.metric("⚡ Ακρίβεια", f"{acc}%")
+
+    st.markdown("### Αξιολόγηση εμφάνισης:")
+    if s.lives <= 0:
+        st.error("🛑 Έμεινες από ζωές! Καλή προσπάθεια — η ρεβάνς σε περιμένει.")
+    elif acc >= 80:
+        st.success(f"🔥 Είσαι MVP! Ο/η {s.player} θα ήταν περήφανος!")
+        play_sound("win")
+        st.balloons()
+    elif acc >= 50:
+        st.info("🏀 Τίμια εμφάνιση! Έχεις ταλέντο — λίγη ακόμα προπόνηση και πατάς κορυφή.")
+    else:
+        st.error("💪 Κάθε πρωταθλητής ξεκίνησε από κάπου. Ξαναπροσπάθησε — θα τα σπάσεις!")
+
+    # --- παράσημα (badges) ---
+    ach = []
+    if s.best_streak >= 5:
+        ach.append("🔥 Hot Streak ×5")
+    elif s.best_streak >= 3:
+        ach.append("🔥 Hot Streak")
+    if s.mistakes == 0 and s.lives > 0:
+        ach.append("💎 Τέλειο παιχνίδι")
+    if not s.used_any_lifeline:
+        ach.append("🧠 Χωρίς βοήθειες")
+    if acc >= 80:
+        ach.append("🎯 Σκοπευτής")
+    if s.score >= 30:
+        ach.append("⭐ 30+ πόντοι")
+    if ach:
+        st.markdown("### 🏅 Παράσημα")
+        st.markdown("  ".join(f"`{a}`" for a in ach))
+
+    st.markdown("---")
+    b1, b2 = st.columns(2)
+    if b1.button("🔁 Παίξε ξανά", type="primary", use_container_width=True):
+        init_game(s.name, s.team, s.player, s.diff)
+        st.rerun()
+    if b2.button("🏠 Αρχικό μενού", use_container_width=True):
+        s.page = "login"
+        st.rerun()
+
+    st.markdown("---")
+    st.subheader("🏆 Leaderboard")
+    render_leaderboard()
+    st.markdown("<br><center><i>Ανάπτυξη & Σχεδιασμός: Γιάννης Παπαδόπουλος © 2026</i></center>", unsafe_allow_html=True)
