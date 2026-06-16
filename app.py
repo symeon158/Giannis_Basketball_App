@@ -43,6 +43,13 @@ all_questions = [
     {"q": "Πόσα φάουλ ομαδικά πρέπει να κάνει μια ομάδα σε ένα δεκάλεπτο για να στείλει τον αντίπαλο στις βολές;", "opts": ["3", "4", "5", "6"], "ans": "B", "troll": False, "diff": "Δύσκολο"}
 ]
 
+# --- SIDEBAR: ΥΠΟΓΡΑΦΗ ΔΗΜΙΟΥΡΓΟΥ ---
+strl.sidebar.title("🏀 Info")
+strl.sidebar.info("Ένα διασκεδαστικό κουίζ μπάσκετ για την παρέα!")
+strl.sidebar.markdown("---")
+strl.sidebar.markdown("👨‍💻 **Δημιουργός:**")
+strl.sidebar.markdown("### Γιάννης Παπαδόπουλος")
+
 # --- ΑΡΧΙΚΟΠΟΙΗΣΗ GLOBAL STATE (Leaderboard) ---
 if "leaderboard" not in strl.session_state:
     strl.session_state.leaderboard = []
@@ -108,12 +115,10 @@ if strl.session_state.app_page == "login":
     with strl.form("login_form"):
         player_name = strl.text_input("Το Όνομά σου / Nickname:")
         
-        # Ενημερωμένη λίστα ομάδων!
         teams_list = ["Ολυμπιακός", "Παναθηναϊκός", "ΑΕΚ", "ΠΑΟΚ", "Άρης", "Ηρακλής", 
                       "Φενέρμπαχτσε", "Εφές", "Ρεάλ Μαδρίτης", "Μπαρτσελόνα", "Μονακό", "Άλλη/Καμία"]
         fav_team = strl.selectbox("Ποια είναι η ομάδα σου;", teams_list)
         
-        # Νέο πεδίο: Αγαπημένος Παίκτης
         f_player = strl.text_input("Ποιος είναι ο αγαπημένος σου παίκτης;")
         
         selected_diff = strl.radio("Επίλεξε Δυσκολία:", ["Εύκολο", "Μέτριο", "Δύσκολο", "Τυχαίες (Mix)"], horizontal=True)
@@ -137,6 +142,8 @@ if strl.session_state.app_page == "login":
         df_lb = df_lb.sort_values(by=["Σκορ (1η)", "Λάθη"], ascending=[False, True]).reset_index(drop=True)
         df_lb.index = df_lb.index + 1
         strl.dataframe(df_lb, use_container_width=True)
+        
+    strl.markdown("<br><center><i>Ανάπτυξη και Σχεδιασμός: Γιάννης Παπαδόπουλος © 2026</i></center>", unsafe_allow_html=True)
 
 
 # ==========================================
@@ -251,3 +258,5 @@ elif strl.session_state.app_page == "game_over":
     if strl.button("🏠 Επιστροφή στο Αρχικό Μενού", use_container_width=True, type="primary"):
         strl.session_state.app_page = "login"
         strl.rerun()
+        
+    strl.markdown("<br><center><i>Ανάπτυξη και Σχεδιασμός: Γιάννης Παπαδόπουλος © 2026</i></center>", unsafe_allow_html=True)
