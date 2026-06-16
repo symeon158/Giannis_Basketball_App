@@ -33,7 +33,7 @@ st.set_page_config(page_title="Basketball Quiz Arena", page_icon="🏀", layout=
 
 MAX_QUESTIONS = 12     # ερωτήσεις ανά παιχνίδι
 START_LIVES   = 3
-TIME_LIMIT    = 22     # δευτερόλεπτα ανά ερώτηση
+TIME_LIMIT    = 25     # δευτερόλεπτα ανά ερώτηση
 TROLL_CHANCE  = 0.35
 FAVORED_TEAM  = "ΠΑΟΚ"  # το easter-egg της ομάδας — άλλαξέ το ελεύθερα!
 
