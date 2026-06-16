@@ -16,8 +16,17 @@ import math
 import wave
 import struct
 import random
+from datetime import datetime
 import pandas as pd
 import streamlit as st
+
+# Το gspread είναι προαιρετικό: αν δεν υπάρχει (π.χ. τοπικά χωρίς ρυθμίσεις),
+# το παιχνίδι παίζει κανονικά με τοπικό leaderboard.
+try:
+    import gspread
+    _HAS_GSPREAD = True
+except Exception:
+    _HAS_GSPREAD = False
 
 # ------------------- ΡΥΘΜΙΣΕΙΣ -------------------
 st.set_page_config(page_title="Basketball Quiz Arena", page_icon="🏀", layout="centered")
@@ -276,8 +285,7 @@ def register_wrong(by_time=False):
 
 def finish_game():
     s = st.session_state
-    s.leaderboard.append({
-        "🆕": "🆕",
+    save_score({
         "Όνομα": s.name, "Ομάδα": s.team, "Αγ. Παίκτης": s.player,
         "Σκορ": s.score, "Λάθη": s.mistakes,
     })
@@ -313,16 +321,82 @@ if hasattr(st, "fragment"):
 else:
     shot_clock = _shot_clock_body
 
-# ------------------- LEADERBOARD -------------------
+# ------------------- ΚΟΙΝΟ LEADERBOARD (GOOGLE SHEETS) -------------------
+# Στήλες του φύλλου:
+SHEET_HEADERS = ["Χρόνος", "Όνομα", "Ομάδα", "Αγ. Παίκτης", "Σκορ", "Λάθη"]
+
+@st.cache_resource(show_spinner=False)
+def _get_sheet():
+    """Επιστρέφει το worksheet ή None (τότε γίνεται fallback σε τοπικό leaderboard)."""
+    if not _HAS_GSPREAD:
+        return None
+    try:
+        creds = dict(st.secrets["gcp_service_account"])
+        key = st.secrets["leaderboard"]["sheet_key"]
+        gc = gspread.service_account_from_dict(creds)
+        ws = gc.open_by_key(key).sheet1
+        if ws.row_values(1) != SHEET_HEADERS:   # βάζει επικεφαλίδες αν λείπουν
+            if not ws.row_values(1):
+                ws.append_row(SHEET_HEADERS)
+        return ws
+    except Exception:
+        return None
+
+@st.cache_data(ttl=20, show_spinner=False)
+def _fetch_rows():
+    """Διαβάζει τις εγγραφές από το Sheet. None => δεν υπάρχει σύνδεση."""
+    ws = _get_sheet()
+    if ws is None:
+        return None
+    try:
+        return ws.get_all_records()
+    except Exception:
+        return None
+
+def save_score(entry):
+    ws = _get_sheet()
+    if ws is None:
+        st.session_state.leaderboard.append(entry)   # fallback: τοπικά
+        return
+    try:
+        ws.append_row(
+            [datetime.now().strftime("%Y-%m-%d %H:%M"),
+             entry["Όνομα"], entry["Ομάδα"], entry["Αγ. Παίκτης"],
+             int(entry["Σκορ"]), int(entry["Λάθη"])],
+            value_input_option="USER_ENTERED",
+        )
+        _fetch_rows.clear()   # ακυρώνει την cache ώστε να φανεί η νέα εγγραφή
+    except Exception:
+        st.session_state.leaderboard.append(entry)
+
+def leaderboard_is_shared():
+    return _get_sheet() is not None
+
 def render_leaderboard():
-    s = st.session_state
-    if not s.leaderboard:
+    rows = _fetch_rows()
+    if rows is None:                       # χωρίς σύνδεση -> τοπικό
+        rows = st.session_state.leaderboard
+    if not rows:
         st.caption("Κανένα σκορ ακόμα — γίνε εσύ ο πρώτος! 🏀")
         return
-    df = pd.DataFrame(s.leaderboard)
-    df = df.sort_values(by=["Σκορ", "Λάθη"], ascending=[False, True]).reset_index(drop=True)
+    df = pd.DataFrame(rows)
+    for col in ("Σκορ", "Λάθη"):
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0).astype(int)
+    if "Σκορ" in df.columns:
+        by = ["Σκορ"] + (["Λάθη"] if "Λάθη" in df.columns else [])
+        asc = [False] + ([True] if "Λάθη" in df.columns else [])
+        df = df.sort_values(by=by, ascending=asc)
+    cols = [c for c in ["Όνομα", "Ομάδα", "Αγ. Παίκτης", "Σκορ", "Λάθη"] if c in df.columns]
+    df = df[cols].head(20).reset_index(drop=True)
     df.index = df.index + 1
     st.dataframe(df, use_container_width=True)
+
+# Δείκτης κατάστασης στο sidebar (κοινό vs τοπικό leaderboard)
+if leaderboard_is_shared():
+    st.sidebar.success("🌐 Κοινό leaderboard ενεργό")
+else:
+    st.sidebar.caption("📋 Τοπικό leaderboard (δες οδηγίες για Google Sheets)")
 
 # ============================================================
 #  ΣΕΛΙΔΑ 1: LOGIN
