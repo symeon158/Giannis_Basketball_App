@@ -85,8 +85,10 @@ def init_game(diff):
     strl.session_state.score = 0  
     strl.session_state.mistakes = 0 
     strl.session_state.streak = 0
+    strl.session_state.error_streak = 0  # <--- ΝΕΟ: Μετράει τα σερί λάθη
     strl.session_state.current_question = None
     strl.session_state.feedback = None
+    strl.session_state.feedback_gif = None # <--- ΝΕΟ: Αποθηκεύει το GIF
     strl.session_state.app_page = "quiz"
 
 def get_next_question():
@@ -103,7 +105,7 @@ def get_next_question():
     else:
         strl.session_state.current_question = strl.session_state.question_queue.popleft()
         strl.session_state.feedback = None
-
+        strl.session_state.feedback_gif = None
 
 # ==========================================
 # ΣΕΛΙΔΑ 1: LOBBY & ΕΓΓΡΑΦΗ ΧΡΗΣΤΗ
@@ -188,6 +190,8 @@ elif strl.session_state.app_page == "quiz":
             if chosen_letter == q_data["ans"]:
                 strl.session_state.unique_completed += 1
                 strl.session_state.streak += 1 
+                strl.session_state.error_streak = 0 # Μηδενίζουμε τα σερί λάθη
+                strl.session_state.feedback_gif = None
                 
                 if not q_data.get("is_repeat"):
                     strl.session_state.score += 1
@@ -195,22 +199,31 @@ elif strl.session_state.app_page == "quiz":
                 if q_data.get("troll"):
                     strl.session_state.feedback = ("success", f"🦅 ΜΠΑΜ! Έτσι μπράβο ρε {strl.session_state.username}! Μόνο ΠΑΟΚ!")
                     strl.balloons() 
+                    strl.session_state.feedback_gif = "https://media.giphy.com/media/26FPCXdkvDbKBbgOI/giphy.gif" # Αετός GIF
                 else:
                     msg = "✅ ΣΩΣΤΟ! Εξαιρετικό σουτ!"
                     if strl.session_state.streak >= 3:
                         msg = f"✅ ΣΩΣΤΟ! 🔥 Είσαι On Fire ({strl.session_state.streak} σερί) σαν τον {strl.session_state.fav_player}!"
+                        strl.session_state.feedback_gif = "https://media.giphy.com/media/xT9DPx50HqZ4FpBqyA/giphy.gif" # Curry Celebration
                     strl.session_state.feedback = ("success", msg)
             else:
                 strl.session_state.mistakes += 1
+                strl.session_state.error_streak += 1 # Αυξάνουμε τα σερί λάθη
                 strl.session_state.streak = 0 
+                strl.session_state.feedback_gif = None
                 
                 if q_data.get("troll"):
                     team_taunt = f"Είσαι {strl.session_state.team}" if strl.session_state.team != "Άλλη/Καμία" else "Παίζεις μπάσκετ"
                     player_taunt = f"έχεις είδωλο τον {strl.session_state.fav_player}" if strl.session_state.fav_player != "Κανένας" else ""
                     strl.session_state.feedback = ("error", f"❌ ΛΑΘΟΣ! {team_taunt}, {player_taunt} και νομίζεις ξέρεις; Μόνο ΠΑΟΚ ρε! 🦅")
+                    strl.session_state.feedback_gif = "https://media.giphy.com/media/xT9IgzoKnwFNmISR8I/giphy.gif" # Αστείο Troll GIF
                 else:
                     player_trash = f"Ούτε ο {strl.session_state.fav_player} δεν έριχνε τέτοια τούβλα!" if strl.session_state.fav_player != "Κανένας" else "Έσπασες τα καλάθια!"
                     strl.session_state.feedback = ("error", f"❌ ΛΑΘΟΣ! {player_trash} Η σωστή ήταν η {q_data['ans']}. (Πάει στο τέλος)")
+                    
+                    if strl.session_state.error_streak >= 3:
+                        strl.session_state.feedback = ("error", "❌ SHAQTIN' A FOOL! 3 σερί λάθη! Συγκεντρώσου!")
+                        strl.session_state.feedback_gif = "https://media.giphy.com/media/3oEdv07JVXwhImYGWc/giphy.gif" # Shaq Laughing
                 
                 repeat_q = q_data.copy()
                 repeat_q["is_repeat"] = True
@@ -218,12 +231,17 @@ elif strl.session_state.app_page == "quiz":
             
             strl.rerun() 
 
+    # --- ΕΜΦΑΝΙΣΗ FEEDBACK & GIF ---
     if strl.session_state.feedback:
         status, msg = strl.session_state.feedback
         if status == "success":
             strl.success(msg)
         else:
             strl.error(msg)
+            
+        # Αν υπάρχει GIF το εμφανίζουμε κάτω από το μήνυμα
+        if strl.session_state.feedback_gif:
+            strl.image(strl.session_state.feedback_gif, width=350)
         
         btn_text = "➡️ Επόμενη Ερώτηση" if len(strl.session_state.question_queue) > 0 else "🏆 Τέλος! Πάμε στα Αποτελέσματα!"
         
