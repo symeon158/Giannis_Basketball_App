@@ -121,7 +121,7 @@ ss_default("diff", "Τυχαίες (Mix)")
 # st.audio(autoplay=True). Έτσι παίζουν στην ΚΥΡΙΑ σελίδα (εκεί που έγινε
 # το κλικ του χρήστη) και ΟΧΙ μέσα σε sandboxed iframe — που τους μπλόκαρε.
 @st.cache_data(show_spinner=False)
-def _tone_wav(freqs, dur=0.16, sr=22050, vol=0.35):
+def _tone_wav(freqs, dur=0.16, sr=22050, vol=0.35, shape="sine"):
     buf = io.BytesIO()
     with wave.open(buf, "wb") as w:
         w.setnchannels(1)
@@ -138,16 +138,20 @@ def _tone_wav(freqs, dur=0.16, sr=22050, vol=0.35):
                     env = max(0.0, (n - i) / attack)
                 else:
                     env = 1.0
-                s = vol * env * math.sin(2 * math.pi * f * i / sr)
+                v = math.sin(2 * math.pi * f * i / sr)
+                if shape == "square":   # πιο "βραχνός" ήχος, ακούγεται καλά
+                    v = 1.0 if v >= 0 else -1.0  # και σε μικρά ηχεία laptop/κινητού
+                s = vol * env * v
                 frames += struct.pack("<h", int(max(-1.0, min(1.0, s)) * 32767))
         w.writeframes(bytes(frames))
     return buf.getvalue()
 
 SOUND_SPECS = {
-    "correct": {"freqs": (660, 880, 1180),      "dur": 0.16, "vol": 0.35},
-    "wrong":   {"freqs": (196, 147),            "dur": 0.18, "vol": 0.35},
-    "win":     {"freqs": (523, 659, 784, 1046), "dur": 0.18, "vol": 0.35},
-    "tick":    {"freqs": (1500,),               "dur": 0.07, "vol": 0.22},
+    "correct": {"freqs": (660, 880, 1180),      "dur": 0.16, "vol": 0.35, "shape": "sine"},
+    "wrong":   {"freqs": (440, 330, 247),       "dur": 0.16, "vol": 0.32, "shape": "square"},
+    "timeout": {"freqs": (392, 311, 233, 175),  "dur": 0.22, "vol": 0.34, "shape": "square"},
+    "win":     {"freqs": (523, 659, 784, 1046), "dur": 0.18, "vol": 0.35, "shape": "sine"},
+    "tick":    {"freqs": (1568,),               "dur": 0.06, "vol": 0.25, "shape": "square"},
 }
 
 def play_sound(kind):
@@ -156,7 +160,8 @@ def play_sound(kind):
     spec = SOUND_SPECS.get(kind)
     if not spec:
         return
-    st.audio(_tone_wav(spec["freqs"], dur=spec["dur"], vol=spec["vol"]),
+    st.audio(_tone_wav(spec["freqs"], dur=spec["dur"], vol=spec["vol"],
+                       shape=spec.get("shape", "sine")),
              format="audio/wav", autoplay=True)
 
 def rerun_app():
@@ -248,7 +253,7 @@ def register_wrong(by_time=False):
     s.err_streak += 1
     s.streak = 0
     s.lives -= 1
-    s.snd = "wrong"
+    s.snd = "timeout" if by_time else "wrong"
     s.celebrate = None
     correct_txt = s.cur["opts"][LETTERS.index(s.cur["ans"])]
 
