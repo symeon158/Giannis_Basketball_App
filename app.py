@@ -490,7 +490,8 @@ if st.session_state.page == "login":
         picked = st.selectbox("Το όνομά σου / Nickname:", names_list + [NAME_OTHER],
                               index=None, placeholder="Διάλεξε όνομα από τη λίστα…")
         custom_name = st.text_input("…ή γράψε νέο όνομα (αν δεν είσαι στη λίστα):")
-        team = st.selectbox("Η αγαπημένη σου ομάδα:", TEAMS)
+        team = st.selectbox("Η αγαπημένη σου ομάδα:", TEAMS,
+                            index=None, placeholder="Διάλεξε ομάδα…")
         player = st.text_input("Ο αγαπημένος σου παίκτης:")
         diff = st.radio("Επίπεδο δυσκολίας:",
                         ["Εύκολο", "Μέτριο", "Δύσκολο", "Τυχαίες (Mix)"],
@@ -508,7 +509,7 @@ if st.session_state.page == "login":
             if not name:
                 st.error("✋ Διάλεξε ένα όνομα από τη λίστα ή γράψε ένα νέο!")
             else:
-                init_game(name, team, player.strip() or "Κανένας", diff, timer_on)
+                init_game(name, team or "Άλλη / Καμία", player.strip() or "Κανένας", diff, timer_on)
                 st.rerun()
 
     st.markdown("---")
