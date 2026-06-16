@@ -332,6 +332,10 @@ def _get_sheet():
         return None
     try:
         creds = dict(st.secrets["gcp_service_account"])
+        # Δέχεται το private_key είτε με πραγματικές αλλαγές γραμμής
+        # είτε με literal \n — διορθώνει το πιο συχνό λάθος ρυθμίσεων.
+        if "private_key" in creds and "\\n" in creds["private_key"]:
+            creds["private_key"] = creds["private_key"].replace("\\n", "\n")
         key = st.secrets["leaderboard"]["sheet_key"]
         gc = gspread.service_account_from_dict(creds)
         ws = gc.open_by_key(key).sheet1
