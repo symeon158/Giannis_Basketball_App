@@ -43,7 +43,7 @@ LETTERS = ["A", "B", "C", "D"]
 # --- Ρυθμίσεις leaderboard ---
 # Πώς ομαδοποιούμε τις εγγραφές ώστε κάθε παίκτης να εμφανίζεται ΜΙΑ φορά.
 # Για ομαδοποίηση μόνο με βάση το όνομα, βάλε: ["Όνομα"]
-LEADERBOARD_GROUP = ["Όνομα", "Ομάδα", "Αγ. Παίκτης"]
+LEADERBOARD_GROUP = ["Όνομα"]
 # "best" = κρατάμε το καλύτερο σκορ κάθε παίκτη · "total" = άθροισμα όλων
 LEADERBOARD_MODE = "total"
 
@@ -101,6 +101,9 @@ TROLL_Q = {
 TEAMS = ["Ολυμπιακός", "Παναθηναϊκός", "ΑΕΚ", "ΠΑΟΚ", "Άρης", "Ηρακλής",
          "Φενέρμπαχτσε", "Εφές", "Ρεάλ Μαδρίτης", "Μπαρτσελόνα", "Μονακό", "Άλλη / Καμία"]
 
+# Λίστα ονομάτων για το dropdown. Το τελευταίο ("Άλλο…") εμφανίζει πεδίο
+# ώστε να μπει όνομα που ΔΕΝ υπάρχει στη λίστα.
+NAME_OTHER = "✏️ Άλλο (γράψε νέο)…"
 names_list = [
     "Γιάννης Παπαδόπουλος",
     "Φώτης Παπακανέλος",
@@ -112,7 +115,7 @@ names_list = [
     "Γιάννης Λάιος",
     "Γιώργος Καλεντερίδης",
     "Ιωάννης Χατζηκωνσταντίνου",
-    "Λάζαρος Τράσιας"
+    "Λάζαρος Τράσιας",
 ]
 
 # ------------------- SIDEBAR -------------------
@@ -444,7 +447,17 @@ def render_leaderboard():
             agg = {"Σκορ": "sum"}
             if "Λάθη" in df.columns:
                 agg["Λάθη"] = "sum"
-            df = df.groupby(group_keys, as_index=False).agg(agg)
+            sums = df.groupby(group_keys, as_index=False).agg(agg)
+            # Κράτα ενδεικτική Ομάδα/Αγ. Παίκτη από την καλύτερη παρτίδα του παίκτη
+            extra = [c for c in ("Ομάδα", "Αγ. Παίκτης")
+                     if c in df.columns and c not in group_keys]
+            if extra:
+                sb = ["Σκορ"] + (["Λάθη"] if "Λάθη" in df.columns else [])
+                sa = [False] + ([True] if "Λάθη" in df.columns else [])
+                rep = (df.sort_values(by=sb, ascending=sa)
+                         .drop_duplicates(subset=group_keys, keep="first")[group_keys + extra])
+                sums = sums.merge(rep, on=group_keys, how="left")
+            df = sums
         else:  # "best": η καλύτερη παρτίδα κάθε παίκτη
             sort_by = ["Σκορ"] + (["Λάθη"] if "Λάθη" in df.columns else [])
             sort_asc = [False] + ([True] if "Λάθη" in df.columns else [])
@@ -474,7 +487,8 @@ if st.session_state.page == "login":
     st.markdown("Φτιάξε το προφίλ σου, διάλεξε δυσκολία και δείξε μας τι ξέρεις από μπάσκετ.")
 
     with st.form("login_form"):
-        name = st.selectbox("Το όνομά σου / Nickname:", names_list)
+        picked = st.selectbox("Το όνομά σου / Nickname:", names_list + [NAME_OTHER])
+        custom_name = st.text_input("…ή γράψε νέο όνομα (αν δεν είσαι στη λίστα):")
         team = st.selectbox("Η αγαπημένη σου ομάδα:", TEAMS)
         player = st.text_input("Ο αγαπημένος σου παίκτης:")
         diff = st.radio("Επίπεδο δυσκολίας:",
@@ -483,10 +497,17 @@ if st.session_state.page == "login":
         timer_on = st.toggle("⏱️ Χρονόμετρο (αντίστροφη μέτρηση & πόντοι ταχύτητας)", value=True)
         submitted = st.form_submit_button("🚀 Έναρξη παιχνιδιού!", type="primary", use_container_width=True)
         if submitted:
-            if not name.strip():
-                st.error("✋ Βάλε ένα όνομα για να μπεις στο παρκέ!")
+            # Αν γραφτεί νέο όνομα, αυτό υπερισχύει. Αλλιώς παίρνουμε τη λίστα.
+            if custom_name.strip():
+                name = custom_name.strip()
+            elif picked != NAME_OTHER:
+                name = picked
             else:
-                init_game(name.strip(), team, player.strip() or "Κανένας", diff, timer_on)
+                name = ""
+            if not name:
+                st.error("✋ Διάλεξε ή γράψε ένα όνομα για να μπεις στο παρκέ!")
+            else:
+                init_game(name, team, player.strip() or "Κανένας", diff, timer_on)
                 st.rerun()
 
     st.markdown("---")
