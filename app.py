@@ -10,11 +10,14 @@
 #   ρολόι δεν "χτυπάει" κάθε δευτερόλεπτο.)
 # ============================================================
 
+import io
 import time
+import math
+import wave
+import struct
 import random
 import pandas as pd
 import streamlit as st
-import streamlit.components.v1 as components
 
 # ------------------- ΡΥΘΜΙΣΕΙΣ -------------------
 st.set_page_config(page_title="Basketball Quiz Arena", page_icon="🏀", layout="centered")
@@ -95,6 +98,9 @@ st.markdown("""
 <style>
 .stApp { background: radial-gradient(1000px 500px at 50% -10%, #1d3553 0%, transparent 60%), linear-gradient(180deg,#0E1A2B,#0A1422); }
 div[data-testid="stMetric"] { background:#0b1726; border:1px solid #243f5d; border-radius:14px; padding:10px; }
+/* Κρύβει το player του ήχου — ο ήχος παίζει αυτόματα στο παρασκήνιο */
+div[data-testid="stAudio"] { height:0 !important; min-height:0 !important; margin:0 !important; padding:0 !important; overflow:hidden !important; }
+.stApp audio { height:0; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -110,31 +116,46 @@ ss_default("team", "")
 ss_default("player", "")
 ss_default("diff", "Τυχαίες (Mix)")
 
-# ------------------- ΉΧΟΣ (Web Audio μέσω component) -------------------
+# ------------------- ΉΧΟΣ -------------------
+# Φτιάχνουμε τους ήχους ως πραγματικά αρχεία WAV και τους παίζουμε με
+# st.audio(autoplay=True). Έτσι παίζουν στην ΚΥΡΙΑ σελίδα (εκεί που έγινε
+# το κλικ του χρήστη) και ΟΧΙ μέσα σε sandboxed iframe — που τους μπλόκαρε.
+@st.cache_data(show_spinner=False)
+def _tone_wav(freqs, dur=0.16, sr=22050, vol=0.35):
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)   # 16-bit
+        w.setframerate(sr)
+        frames = bytearray()
+        attack = int(0.012 * sr)  # μικρό fade in/out για να μην "κλικάρει"
+        for f in freqs:
+            n = int(sr * dur)
+            for i in range(n):
+                if i < attack:
+                    env = i / attack
+                elif i > n - attack:
+                    env = max(0.0, (n - i) / attack)
+                else:
+                    env = 1.0
+                s = vol * env * math.sin(2 * math.pi * f * i / sr)
+                frames += struct.pack("<h", int(max(-1.0, min(1.0, s)) * 32767))
+        w.writeframes(bytes(frames))
+    return buf.getvalue()
+
+SOUND_FREQS = {
+    "correct": (660, 880, 1180),
+    "wrong":   (196, 147),
+    "win":     (523, 659, 784, 1046),
+}
+
 def play_sound(kind):
     if not st.session_state.get("sound_on", True):
         return
-    seqs = {"correct": [660, 880, 1180], "wrong": [200, 150], "win": [523, 659, 784, 1046]}
-    seq = seqs.get(kind, [440])
-    components.html(f"""
-    <script>
-    (function(){{
-      try {{
-        const ctx = new (window.AudioContext || window.webkitAudioContext)();
-        const seq = {seq};
-        seq.forEach(function(f, i) {{
-          const o = ctx.createOscillator(), g = ctx.createGain();
-          o.type = 'square'; o.frequency.value = f;
-          o.connect(g); g.connect(ctx.destination);
-          const t = ctx.currentTime + i * 0.12;
-          g.gain.setValueAtTime(0.15, t);
-          g.gain.exponentialRampToValueAtTime(0.0001, t + 0.15);
-          o.start(t); o.stop(t + 0.16);
-        }});
-      }} catch(e) {{}}
-    }})();
-    </script>
-    """, height=0)
+    freqs = SOUND_FREQS.get(kind)
+    if not freqs:
+        return
+    st.audio(_tone_wav(freqs), format="audio/wav", autoplay=True)
 
 def rerun_app():
     try:
