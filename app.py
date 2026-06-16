@@ -40,6 +40,13 @@ FAVORED_TEAM  = "ΠΑΟΚ"  # το easter-egg της ομάδας — άλλαξ
 DIFF_BASE = {"Εύκολο": 1, "Μέτριο": 2, "Δύσκολο": 3}
 LETTERS = ["A", "B", "C", "D"]
 
+# --- Ρυθμίσεις leaderboard ---
+# Πώς ομαδοποιούμε τις εγγραφές ώστε κάθε παίκτης να εμφανίζεται ΜΙΑ φορά.
+# Για ομαδοποίηση μόνο με βάση το όνομα, βάλε: ["Όνομα"]
+LEADERBOARD_GROUP = ["Όνομα", "Ομάδα", "Αγ. Παίκτης"]
+# "best" = κρατάμε το καλύτερο σκορ κάθε παίκτη · "total" = άθροισμα όλων
+LEADERBOARD_MODE = "best"
+
 # ------------------- ΒΑΣΗ ΕΡΩΤΗΣΕΩΝ -------------------
 # diff: "Εύκολο" | "Μέτριο" | "Δύσκολο" ;  ans: γράμμα "A"-"D"
 ALL_QUESTIONS = [
@@ -415,6 +422,21 @@ def render_leaderboard():
     for col in ("Σκορ", "Λάθη"):
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0).astype(int)
+
+    # Ομαδοποίηση: κάθε παίκτης εμφανίζεται μία φορά
+    group_keys = [k for k in LEADERBOARD_GROUP if k in df.columns]
+    if group_keys and "Σκορ" in df.columns:
+        if LEADERBOARD_MODE == "total":
+            agg = {"Σκορ": "sum"}
+            if "Λάθη" in df.columns:
+                agg["Λάθη"] = "sum"
+            df = df.groupby(group_keys, as_index=False).agg(agg)
+        else:  # "best": η καλύτερη παρτίδα κάθε παίκτη
+            sort_by = ["Σκορ"] + (["Λάθη"] if "Λάθη" in df.columns else [])
+            sort_asc = [False] + ([True] if "Λάθη" in df.columns else [])
+            df = (df.sort_values(by=sort_by, ascending=sort_asc)
+                    .drop_duplicates(subset=group_keys, keep="first"))
+
     if "Σκορ" in df.columns:
         by = ["Σκορ"] + (["Λάθη"] if "Λάθη" in df.columns else [])
         asc = [False] + ([True] if "Λάθη" in df.columns else [])
