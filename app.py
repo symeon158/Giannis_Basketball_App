@@ -171,9 +171,10 @@ def rerun_app():
         st.rerun()
 
 # ------------------- ΛΟΓΙΚΗ ΠΑΙΧΝΙΔΙΟΥ -------------------
-def init_game(name, team, player, diff):
+def init_game(name, team, player, diff, timer_on=True):
     s = st.session_state
     s.name, s.team, s.player, s.diff = name, team, player, diff
+    s.timer_on = timer_on
 
     pool = [dict(q) for q in ALL_QUESTIONS if diff == "Τυχαίες (Mix)" or q["diff"] == diff]
     random.shuffle(pool)
@@ -230,7 +231,7 @@ def register_correct():
     s.err_streak = 0
     s.best_streak = max(s.best_streak, s.streak)
     base = 2 if s.cur.get("troll") else DIFF_BASE.get(s.cur["diff"], 1)
-    time_bonus = s.time_left // 3
+    time_bonus = (s.time_left // 3) if s.get("timer_on", True) else 0
     streak_bonus = 2 if s.streak >= 3 else 0
     gained = base + time_bonus + streak_bonus
     s.score += gained
@@ -337,12 +338,13 @@ if st.session_state.page == "login":
         diff = st.radio("Επίπεδο δυσκολίας:",
                         ["Εύκολο", "Μέτριο", "Δύσκολο", "Τυχαίες (Mix)"],
                         index=3, horizontal=True)
+        timer_on = st.toggle("⏱️ Χρονόμετρο (αντίστροφη μέτρηση & πόντοι ταχύτητας)", value=True)
         submitted = st.form_submit_button("🚀 Έναρξη παιχνιδιού!", type="primary", use_container_width=True)
         if submitted:
             if not name.strip():
                 st.error("✋ Βάλε ένα όνομα για να μπεις στο παρκέ!")
             else:
-                init_game(name.strip(), team, player.strip() or "Κανένας", diff)
+                init_game(name.strip(), team, player.strip() or "Κανένας", diff, timer_on)
                 st.rerun()
 
     st.markdown("---")
@@ -370,8 +372,9 @@ elif st.session_state.page == "quiz":
     prog = s.done / s.total if s.total else 0
     st.progress(prog, text=f"Έχεις βρει {s.done} από {s.total} ερωτήσεις")
 
-    # --- χρονόμετρο ---
-    shot_clock()
+    # --- χρονόμετρο (μόνο αν είναι ενεργό) ---
+    if s.get("timer_on", True):
+        shot_clock()
 
     st.markdown("---")
     cur = s.cur
@@ -409,12 +412,14 @@ elif st.session_state.page == "quiz":
         if choice is None:
             st.warning("⚠️ Διάλεξε πρώτα μια απάντηση!")
         else:
-            elapsed = time.time() - s.q_start
-            rem = max(0, TIME_LIMIT - int(elapsed))
-            s.time_left = rem
             s.answered = True
             chosen_letter = choice[0]
-            if rem <= 0:
+            if s.get("timer_on", True):
+                elapsed = time.time() - s.q_start
+                s.time_left = max(0, TIME_LIMIT - int(elapsed))
+            else:
+                s.time_left = 0  # χωρίς χρονόμετρο δεν υπάρχει μπόνους ταχύτητας
+            if s.get("timer_on", True) and s.time_left <= 0:
                 register_wrong(by_time=True)
             elif chosen_letter == cur["ans"]:
                 register_correct()
@@ -499,7 +504,7 @@ elif st.session_state.page == "over":
     st.markdown("---")
     b1, b2 = st.columns(2)
     if b1.button("🔁 Παίξε ξανά", type="primary", use_container_width=True):
-        init_game(s.name, s.team, s.player, s.diff)
+        init_game(s.name, s.team, s.player, s.diff, s.get("timer_on", True))
         st.rerun()
     if b2.button("🏠 Αρχικό μενού", use_container_width=True):
         s.page = "login"
