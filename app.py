@@ -487,7 +487,8 @@ if st.session_state.page == "login":
     st.markdown("Φτιάξε το προφίλ σου, διάλεξε δυσκολία και δείξε μας τι ξέρεις από μπάσκετ.")
 
     with st.form("login_form"):
-        picked = st.selectbox("Το όνομά σου / Nickname:", names_list + [NAME_OTHER])
+        picked = st.selectbox("Το όνομά σου / Nickname:", names_list + [NAME_OTHER],
+                              index=None, placeholder="Διάλεξε όνομα από τη λίστα…")
         custom_name = st.text_input("…ή γράψε νέο όνομα (αν δεν είσαι στη λίστα):")
         team = st.selectbox("Η αγαπημένη σου ομάδα:", TEAMS)
         player = st.text_input("Ο αγαπημένος σου παίκτης:")
@@ -500,12 +501,12 @@ if st.session_state.page == "login":
             # Αν γραφτεί νέο όνομα, αυτό υπερισχύει. Αλλιώς παίρνουμε τη λίστα.
             if custom_name.strip():
                 name = custom_name.strip()
-            elif picked != NAME_OTHER:
+            elif picked and picked != NAME_OTHER:
                 name = picked
             else:
                 name = ""
             if not name:
-                st.error("✋ Διάλεξε ή γράψε ένα όνομα για να μπεις στο παρκέ!")
+                st.error("✋ Διάλεξε ένα όνομα από τη λίστα ή γράψε ένα νέο!")
             else:
                 init_game(name, team, player.strip() or "Κανένας", diff, timer_on)
                 st.rerun()
