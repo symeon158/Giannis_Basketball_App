@@ -108,7 +108,7 @@ ALL_QUESTIONS = [
     {"q": "Ποιος γκαρντ των Θάντερ ψηφίστηκε MVP του NBA το 2025;", "opts": ["Σάι Γκίλτζιους-Αλεξάντερ", "Λούκα Ντόντσιτς", "Τζέισον Τέιτουμ", "Άντονι Έντουαρντς"], "ans": "A", "diff": "Δύσκολο"},
     {"q": "Ποιος παίκτης έχει τα περισσότερα πρωταθλήματα NBA στην ιστορία (11 τίτλοι);", "opts": ["Μπιλ Ράσελ", "Μάικλ Τζόρνταν", "Καρίμ Αμπντούλ-Τζαμπάρ", "ΛεΜπρόν Τζέιμς"], "ans": "A", "diff": "Δύσκολο"},
     {"q": "Πόσες EuroLeague έχει κατακτήσει ο Παναθηναϊκός;", "opts": ["5", "6", "7", "8"], "ans": "C", "diff": "Δύσκολο"},
-    {"q": "Πόσες EuroLeague έχει κατακτήσει ο Ολυμπιακός;", "opts": ["1", "2", "3", "4"], "ans": "D", "diff": "Δύσκολο"},
+    {"q": "Πόσες EuroLeague έχει κατακτήσει ο Ολυμπιακός;", "opts": ["1", "2", "3", "4"], "ans": "C", "diff": "Δύσκολο"},
     {"q": "Ποια χρονιά υιοθέτησε το NBA τη γραμμή των τριών πόντων;", "opts": ["1976", "1979", "1985", "1992"], "ans": "B", "diff": "Δύσκολο"},
 ]
 
@@ -345,11 +345,11 @@ def finish_game():
 def _shot_clock_body():
     s = st.session_state
     if s.get("answered"):
-        rem = s.get("time_left", 0)
+        rem = max(0, min(TIME_LIMIT, s.get("time_left", 0)))
         st.progress(rem / TIME_LIMIT if TIME_LIMIT else 0, text=f"⏱️ Χρόνος: {rem}s")
         return
     elapsed = time.time() - s.q_start
-    rem = max(0, TIME_LIMIT - int(elapsed))
+    rem = max(0, min(TIME_LIMIT, TIME_LIMIT - int(elapsed)))
     icon = "⏱️" if rem > 5 else "⚠️"
     st.progress(rem / TIME_LIMIT, text=f"{icon} Χρόνος επίθεσης: {rem}s")
     if rem <= 0:
@@ -560,7 +560,7 @@ elif st.session_state.page == "quiz":
     c3.metric("Ζωές", "❤️" * s.lives + "🤍" * max(0, START_LIVES - s.lives))
 
     # --- πρόοδος ---
-    prog = s.done / s.total if s.total else 0
+    prog = min(1.0, max(0.0, s.done / s.total)) if s.total else 0
     st.progress(prog, text=f"Έχεις βρει {s.done} από {s.total} ερωτήσεις")
 
     # --- χρονόμετρο (μόνο αν είναι ενεργό) ---
@@ -607,7 +607,7 @@ elif st.session_state.page == "quiz":
             chosen_letter = choice[0]
             if s.get("timer_on", True):
                 elapsed = time.time() - s.q_start
-                s.time_left = max(0, TIME_LIMIT - int(elapsed))
+                s.time_left = max(0, min(TIME_LIMIT, TIME_LIMIT - int(elapsed)))
             else:
                 s.time_left = 0  # χωρίς χρονόμετρο δεν υπάρχει μπόνους ταχύτητας
             if s.get("timer_on", True) and s.time_left <= 0:
